@@ -26,7 +26,6 @@ class HomePage extends StatelessWidget {
       appBar: AppBar(
         title: GestureDetector(
           onTap: () {
-            // Navigate to the developer info screen
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => DeveloperInfoScreen()),
@@ -34,16 +33,16 @@ class HomePage extends StatelessWidget {
           },
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.8), // Slightly transparent background
-              borderRadius: BorderRadius.circular(12), // Rounded corners
+              color: Colors.white.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(12),
             ),
-            padding: EdgeInsets.symmetric(vertical: 4, horizontal: 10), // Spacing inside the container
+            padding: EdgeInsets.symmetric(vertical: 4, horizontal: 10),
             child: Text(
               'Solar Energy Trading',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: Colors.yellow[700], // Change the text color if needed
+                color: Colors.yellow[700],
               ),
             ),
           ),
@@ -51,7 +50,7 @@ class HomePage extends StatelessWidget {
         actions: [
           IconButton(icon: Icon(Icons.search), onPressed: () {}),
           IconButton(
-            icon: Icon(Icons.chat_bubble_outline), // Chat icon
+            icon: Icon(Icons.chat_bubble_outline),
             onPressed: () {
               Navigator.push(
                 context,
@@ -60,7 +59,7 @@ class HomePage extends StatelessWidget {
             },
           ),
           IconButton(
-            icon: Icon(Icons.comment_outlined), // Community features icon
+            icon: Icon(Icons.comment_outlined),
             onPressed: () {
               Navigator.push(
                 context,
@@ -79,16 +78,20 @@ class HomePage extends StatelessWidget {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            HeroSection(),
-            TradingCardsSection(),
-            UserFeedbackSection(),
-          ],
-        ),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            child: Column(
+              children: [
+                HeroSection(),
+                TradingCardsSection(),
+                UserFeedbackSection(),
+              ],
+            ),
+          ),
+          SwipeablePanel(),
+        ],
       ),
-      bottomNavigationBar: Footer(),
     );
   }
 }
@@ -142,14 +145,79 @@ class CommunityScreen extends StatelessWidget {
             SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
-                // Handle the submission of feedback
                 String feedback = _controller.text;
-                _controller.clear(); // Clear the input field
+                _controller.clear();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Feedback submitted!')),
                 );
               },
               child: Text('Submit'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SwipeablePanel extends StatefulWidget {
+  @override
+  _SwipeablePanelState createState() => _SwipeablePanelState();
+}
+
+class _SwipeablePanelState extends State<SwipeablePanel> {
+  double _panelHeight = 0.0;
+
+  void _togglePanel() {
+    setState(() {
+      _panelHeight = _panelHeight == 0.0 ? 300.0 : 0.0; // Toggle between 0 and 300
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        if (details.velocity.pixelsPerSecond.dx < 0) {
+          _togglePanel(); // Swipe left to open the panel
+        }
+      },
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 300),
+        height: _panelHeight,
+        color: Colors.blueGrey[200],
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'User Details',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Divider(),
+            ListTile(
+              leading: Icon(Icons.person),
+              title: Text('Username: Raghav'),
+            ),
+            ListTile(
+              leading: Icon(Icons.history),
+              title: Text('Trading History: 10 trades'),
+            ),
+            ListTile(
+              leading: Icon(Icons.notifications),
+              title: Text('Notifications: 5'),
+            ),
+            ListTile(
+              leading: Icon(Icons.tips_and_updates),
+              title: Text('Tips & Insights'),
+            ),
+            ListTile(
+              leading: Icon(Icons.settings),
+              title: Text('Settings'),
+              onTap: () {
+                // Handle settings tap
+              },
             ),
           ],
         ),
