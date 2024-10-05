@@ -21,6 +21,7 @@ version: 1.0.0+1
 environment:
   sdk: ^3.5.3
 
+
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
 # consider running `flutter pub upgrade --major-versions`. Alternatively,
@@ -30,6 +31,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  provider: ^6.0.3
+  carousel_slider: ^5.0.0
+  audioplayers: ^6.1.0
 
 
   # The following adds the Cupertino Icons font to your application.
@@ -52,6 +56,8 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  assets:
+   - assets/sounds/button_click.mp3
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
