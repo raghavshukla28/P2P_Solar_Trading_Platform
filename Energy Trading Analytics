@@ -1,0 +1,173 @@
+import pandas as pd
+import numpy as np
+from web3 import Web3
+from datetime import datetime, timedelta
+import plotly.express as px
+import plotly.graph_objects as go
+from typing import List, Dict, Any
+
+class EnergyTradingAnalytics:
+    def __init__(self, contract_address: str, web3_provider: str):
+        """
+        Initialize the analytics class with blockchain connection
+        
+        Args:
+            contract_address: Address of the deployed smart contract
+            web3_provider: URL of the Web3 provider (e.g., Infura endpoint)
+        """
+        self.web3 = Web3(Web3.HTTPProvider(web3_provider))
+        self.contract_address = contract_address
+        # ABI would be imported from contract JSON
+        self.contract = self.web3.eth.contract(address=contract_address, abi=ABI)
+        
+    def fetch_transactions(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
+        """
+        Fetch all energy trading transactions within a date range
+        
+        Returns:
+            DataFrame with transaction details
+        """
+        transactions = []
+        # Get events from blockchain
+        events = self.contract.events.TransactionCreated.get_logs(
+            fromBlock=self.web3.eth.get_block_number() - 10000  # Last 10000 blocks
+        )
+        
+        for event in events:
+            tx = event['args']
+            timestamp = datetime.fromtimestamp(
+                self.web3.eth.get_block(event['blockNumber'])['timestamp']
+            )
+            
+            if start_date <= timestamp <= end_date:
+                transactions.append({
+                    'transaction_id': tx['transactionId'],
+                    'seller': tx['seller'],
+                    'buyer': tx['buyer'],
+                    'energy_amount': tx['energyAmount'],
+                    'total_price': tx['totalPrice'],
+                    'timestamp': timestamp,
+                    'price_per_unit': tx['totalPrice'] / tx['energyAmount']
+                })
+                
+        return pd.DataFrame(transactions)
+    
+    def analyze_price_trends(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Analyze price trends over time
+        
+        Returns:
+            Dictionary containing price analysis metrics
+        """
+        daily_prices = df.groupby(df['timestamp'].dt.date)['price_per_unit'].agg([
+            'mean', 'min', 'max', 'std'
+        ]).reset_index()
+        
+        return {
+            'average_price': df['price_per_unit'].mean(),
+            'price_volatility': df['price_per_unit'].std(),
+            'daily_trends': daily_prices,
+            'price_correlation': df.groupby('seller')['price_per_unit'].corr()
+        }
+    
+    def generate_market_insights(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Generate comprehensive market insights
+        
+        Returns:
+            Dictionary containing market analysis metrics
+        """
+        total_energy = df['energy_amount'].sum()
+        total_transactions = len(df)
+        unique_participants = len(set(df['seller'].unique()) | set(df['buyer'].unique()))
+        
+        hourly_volume = df.groupby(df['timestamp'].dt.hour)['energy_amount'].sum()
+        peak_hours = hourly_volume.nlargest(3).index.tolist()
+        
+        return {
+            'total_energy_traded': total_energy,
+            'total_transactions': total_transactions,
+            'unique_participants': unique_participants,
+            'peak_trading_hours': peak_hours,
+            'average_transaction_size': total_energy / total_transactions
+        }
+    
+    def plot_price_trends(self, df: pd.DataFrame) -> go.Figure:
+        """
+        Create interactive price trend visualization
+        
+        Returns:
+            Plotly figure object
+        """
+        fig = go.Figure()
+        
+        # Add price trend line
+        fig.add_trace(go.Scatter(
+            x=df['timestamp'],
+            y=df['price_per_unit'],
+            mode='lines',
+            name='Price per Unit'
+        ))
+        
+        # Add moving average
+        ma_7d = df.sort_values('timestamp').set_index('timestamp')['price_per_unit'].rolling('7D').mean()
+        fig.add_trace(go.Scatter(
+            x=ma_7d.index,
+            y=ma_7d.values,
+            mode='lines',
+            name='7-day Moving Average',
+            line=dict(dash='dash')
+        ))
+        
+        fig.update_layout(
+            title='Energy Price Trends Over Time',
+            xaxis_title='Date',
+            yaxis_title='Price per Unit (Wei/Wh)',
+            hovermode='x unified'
+        )
+        
+        return fig
+    
+    def generate_report(self, start_date: datetime, end_date: datetime) -> Dict[str, Any]:
+        """
+        Generate comprehensive analytics report
+        
+        Returns:
+            Dictionary containing all analysis results
+        """
+        df = self.fetch_transactions(start_date, end_date)
+        
+        price_analysis = self.analyze_price_trends(df)
+        market_insights = self.generate_market_insights(df)
+        price_chart = self.plot_price_trends(df)
+        
+        return {
+            'price_analysis': price_analysis,
+            'market_insights': market_insights,
+            'visualizations': {
+                'price_trends': price_chart
+            },
+            'raw_data': df
+        }
+
+    def export_report(self, report: Dict[str, Any], output_path: str):
+        """
+        Export analytics report to files
+        
+        Args:
+            report: Report dictionary from generate_report
+            output_path: Directory to save report files
+        """
+        # Save raw data
+        report['raw_data'].to_csv(f'{output_path}/transactions.csv', index=False)
+        
+        # Save visualizations
+        report['visualizations']['price_trends'].write_html(
+            f'{output_path}/price_trends.html'
+        )
+        
+        # Save metrics summary
+        pd.DataFrame({
+            **report['price_analysis'],
+            **report['market_insights']
+        }, index=[0]).to_csv(f'{output_path}/metrics_summary.csv', index=False)
