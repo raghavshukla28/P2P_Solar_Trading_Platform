@@ -1,0 +1,140 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+
+/**
+ * @title EnergyTradingPlatform
+ * @dev Implements a P2P energy trading platform
+ */
+contract EnergyTradingPlatform is ReentrancyGuard, Ownable, Pausable {
+    // Structs
+    struct EnergyOffer {
+        address seller;
+        uint256 energyAmount; // in Wh (Watt-hours)
+        uint256 pricePerUnit; // in Wei per Wh
+        bool isActive;
+        string renewableSource; // solar, wind, etc.
+        uint256 timestamp;
+    }
+
+    struct EnergyTransaction {
+        address seller;
+        address buyer;
+        uint256 energyAmount;
+        uint256 totalPrice;
+        uint256 timestamp;
+        string status; // pending, completed, cancelled
+    }
+
+    // State variables
+    mapping(uint256 => EnergyOffer) public energyOffers;
+    mapping(uint256 => EnergyTransaction) public energyTransactions;
+    mapping(address => uint256[]) public userOffers;
+    mapping(address => uint256[]) public userTransactions;
+
+    uint256 public offerCount;
+    uint256 public transactionCount;
+    uint256 public platformFee; // in basis points (1% = 100)
+
+    // Events
+    event OfferCreated(uint256 indexed offerId, address indexed seller, uint256 energyAmount, uint256 pricePerUnit);
+    event OfferCancelled(uint256 indexed offerId);
+    event TransactionCreated(uint256 indexed transactionId, address indexed seller, address indexed buyer, uint256 energyAmount, uint256 totalPrice);
+    event TransactionCompleted(uint256 indexed transactionId);
+    event TransactionCancelled(uint256 indexed transactionId);
+
+    constructor(uint256 _platformFee) {
+        platformFee = _platformFee;
+    }
+
+    // Core functions
+    function createEnergyOffer(
+        uint256 _energyAmount,
+        uint256 _pricePerUnit,
+        string memory _renewableSource
+    ) external whenNotPaused returns (uint256) {
+        require(_energyAmount > 0, "Energy amount must be greater than 0");
+        require(_pricePerUnit > 0, "Price must be greater than 0");
+
+        uint256 offerId = offerCount++;
+        
+        EnergyOffer storage offer = energyOffers[offerId];
+        offer.seller = msg.sender;
+        offer.energyAmount = _energyAmount;
+        offer.pricePerUnit = _pricePerUnit;
+        offer.isActive = true;
+        offer.renewableSource = _renewableSource;
+        offer.timestamp = block.timestamp;
+
+        userOffers[msg.sender].push(offerId);
+        
+        emit OfferCreated(offerId, msg.sender, _energyAmount, _pricePerUnit);
+        return offerId;
+    }
+
+    function purchaseEnergy(uint256 _offerId) external payable whenNotPaused nonReentrant {
+        EnergyOffer storage offer = energyOffers[_offerId];
+        require(offer.isActive, "Offer is not active");
+        require(msg.sender != offer.seller, "Cannot buy your own energy");
+
+        uint256 totalPrice = offer.energyAmount * offer.pricePerUnit;
+        uint256 feeAmount = (totalPrice * platformFee) / 10000;
+        require(msg.value >= totalPrice + feeAmount, "Insufficient payment");
+
+        offer.isActive = false;
+        uint256 transactionId = transactionCount++;
+
+        EnergyTransaction storage transaction = energyTransactions[transactionId];
+        transaction.seller = offer.seller;
+        transaction.buyer = msg.sender;
+        transaction.energyAmount = offer.energyAmount;
+        transaction.totalPrice = totalPrice;
+        transaction.timestamp = block.timestamp;
+        transaction.status = "pending";
+
+        userTransactions[msg.sender].push(transactionId);
+        userTransactions[offer.seller].push(transactionId);
+
+        // Transfer payment to seller
+        payable(offer.seller).transfer(totalPrice);
+        // Transfer fee to platform owner
+        payable(owner()).transfer(feeAmount);
+        
+        emit TransactionCreated(transactionId, offer.seller, msg.sender, offer.energyAmount, totalPrice);
+    }
+
+    function confirmDelivery(uint256 _transactionId) external {
+        EnergyTransaction storage transaction = energyTransactions[_transactionId];
+        require(msg.sender == transaction.buyer, "Only buyer can confirm delivery");
+        require(keccak256(bytes(transaction.status)) == keccak256(bytes("pending")), "Invalid transaction status");
+
+        transaction.status = "completed";
+        emit TransactionCompleted(_transactionId);
+    }
+
+    // Getter functions
+    function getOffersByUser(address _user) external view returns (uint256[] memory) {
+        return userOffers[_user];
+    }
+
+    function getTransactionsByUser(address _user) external view returns (uint256[] memory) {
+        return userTransactions[_user];
+    }
+
+    // Admin functions
+    function updatePlatformFee(uint256 _newFee) external onlyOwner {
+        require(_newFee <= 1000, "Fee cannot exceed 10%");
+        platformFee = _newFee;
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+}
